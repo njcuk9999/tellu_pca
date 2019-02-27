@@ -13,7 +13,6 @@ from shared_functions import *
 from astropy.io import fits
 import numpy as np
 from astropy.table import Table
-from scipy.interpolate import InterpolatedUnivariateSpline as IUVSpline
 from scipy.optimize import curve_fit
 from scipy.ndimage import filters
 import warnings
@@ -27,22 +26,11 @@ import os
 # Define variables
 # =============================================================================
 # plotting options
-DEBUG_PLOT = True
-PLOT = True
+PLOT = False
+DEBUG_PLOT = False
 
 # -----------------------------------------------------------------------------
-# define instrument name
-INSTRUMENT = 'CARMENES'
-INSTRUMENT = 'SPIROU'
-
-# get instrument setup
-if INSTRUMENT == 'CARMENES':
-    from setup_car import *
-if INSTRUMENT == 'SPIROU':
-    from setup_spirou import *
-# -----------------------------------------------------------------------------
-# output directory
-OUTPUT_DIR = WORKSPACE + '/trans/'
+# output file suffix
 OUT_SUFFIX = '_trans.fits'
 
 
@@ -96,19 +84,19 @@ def mk_tellu_wave_flux_plot(p, order_num, wave, tau1, sp, sp3, sed,
 def calculate_telluric_absorption(p, loc):
     func_name = 'calculate_telluric_absorption()'
     # get parameters from p
-    dparam_threshold = MKTELLU_DPARAM_THRES
-    maximum_iteration = MKTELLU_MAX_ITER
-    threshold_transmission_fit = MKTELLU_THRES_TRANSFIT
-    transfit_upper_bad = MKTELLU_TRANS_FIT_UPPER_BAD
-    min_watercol = MKTELLU_TRANS_MIN_WATERCOL
-    max_watercol = MKTELLU_TRANS_MAX_WATERCOL
-    min_number_good_points = MKTELLU_TRANS_MIN_NUM_GOOD
-    btrans_percentile = MKTELLU_TRANS_TAU_PERCENTILE
-    nsigclip = MKTELLU_TRANS_SIGMA_CLIP
-    med_filt = MKTELLU_TRANS_TEMPLATE_MEDFILT
-    small_weight = MKTELLU_SMALL_WEIGHTING_ERROR
-    tellu_med_sampling = MKTELLU_MED_SAMPLING
-    plot_order_nums = MKTELLU_PLOT_ORDER_NUMS
+    dparam_threshold = p['MKTELLU_DPARAM_THRES']
+    maximum_iteration = p['MKTELLU_MAX_ITER']
+    threshold_transmission_fit = p['MKTELLU_THRES_TRANSFIT']
+    transfit_upper_bad = p['MKTELLU_TRANS_FIT_UPPER_BAD']
+    min_watercol = p['MKTELLU_TRANS_MIN_WATERCOL']
+    max_watercol = p['MKTELLU_TRANS_MAX_WATERCOL']
+    min_number_good_points = p['MKTELLU_TRANS_MIN_NUM_GOOD']
+    btrans_percentile = p['MKTELLU_TRANS_TAU_PERCENTILE']
+    nsigclip = p['MKTELLU_TRANS_SIGMA_CLIP']
+    med_filt = p['MKTELLU_TRANS_TEMPLATE_MEDFILT']
+    small_weight = p['MKTELLU_SMALL_WEIGHTING_ERROR']
+    tellu_med_sampling = p['MKTELLU_MED_SAMPLING']
+    plot_order_nums = p['MKTELLU_PLOT_ORDER_NUMS']
 
     # get data from loc
     airmass = loc['AIRMASS']
@@ -292,7 +280,7 @@ def calculate_telluric_absorption(p, loc):
             # set all small values to 1% to avoid small weighting errors
             sed_update[ww1 < small_weight] = np.nan
 
-            if wconv[order_num] == MKTELLU_FINER_CONV_WIDTH:
+            if wconv[order_num] == p['MKTELLU_FINER_CONV_WIDTH']:
                 rms_limit = 0.1
             else:
                 rms_limit = 0.3
@@ -366,19 +354,12 @@ def calculate_telluric_absorption(p, loc):
         # if plot orders is 'all' plot all
         if plot_order_nums == 'all':
             plot_order_nums = np.arange(norders).astype(int)
-            # start non-interactive plot
-            plt.ioff()
-            off = True
-        else:
-            plt.ion()
-            off = False
         # loop around the orders to show
         for order_num in plot_order_nums:
             pargs = [order_num, wave, tau1, sp, sp3_arr[order_num], sed,
                      sed[order_num], keep]
             mk_tellu_wave_flux_plot(p, *pargs)
-        if off:
-            plt.ion()
+
 
     # return values via loc
     loc['PASSED'] = not fail
@@ -402,10 +383,10 @@ def calc_tapas_abso(p, loc, keep, tau_water, tau_others):
 
     """
     # get constants from p
-    tau_water_upper = MKTELLU_TAU_WATER_ULIMIT
-    tau_others_lower = MKTELLU_TAU_OTHER_LLIMIT
-    tau_others_upper = MKTELLU_TAU_OTHER_ULIMIT
-    tapas_small_number = MKTELLU_SMALL_LIMIT
+    tau_water_upper = p['MKTELLU_TAU_WATER_ULIMIT']
+    tau_others_lower = p['MKTELLU_TAU_OTHER_LLIMIT']
+    tau_others_upper = p['MKTELLU_TAU_OTHER_ULIMIT']
+    tapas_small_number = p['MKTELLU_SMALL_LIMIT']
 
     # get data from loc
     sp_water = np.array(loc['TAPAS_WATER'])
@@ -451,64 +432,26 @@ def calc_tapas_abso(p, loc, keep, tau_water, tau_others):
     return sp
 
 
-def construct_convolution_kernal():
-    lsf = FWHM_PIXEL_LSF
-    # get the number of pixels
-    npix = int(np.ceil(3 * lsf * 3.0 / 2) * 2 + 1)
-    # set up the kernal x values
-    xpix = np.arange(npix) - npix // 2
-    # get the gaussian kernel
-    ker = np.exp(-0.5 * ( xpix / lsf / fwhm()) ** 2 )
-    # return kernel
-    return ker
-
-
-def resample_tapas(p, loc, mwave, npix, nord, tapas):
-
-    tapas_all_species = np.zeros([len(TELLU_ABSORBERS), npix * nord])
-
-    for n_species, molecule in enumerate(TELLU_ABSORBERS):
-        # log process
-        wmsg = 'Processing molecule: {0}'
-        WLOG(p, '', wmsg.format(molecule))
-        # get wavelengths
-        lam = tapas['wavelength']
-        # get molecule transmission
-        trans = tapas['trans_{0}'.format(molecule)]
-        # interpolate with Univariate Spline
-        tapas_spline = IUVSpline(lam, trans)
-        # log the mean transmission level
-        wmsg = '\tMean Trans level: {0:.3f}'.format(np.mean(trans))
-        WLOG(p, '', wmsg)
-        # convolve all tapas absorption to the SPIRou approximate resolution
-        for order_num in range(nord):
-            # get the order position
-            start = order_num * npix
-            end = (order_num * npix) + npix
-            # interpolate the values at these points
-            svalues = tapas_spline(mwave[order_num])
-            # convolve with a gaussian function
-            cvalues = np.convolve(svalues, kernel, mode='same')
-            # add to storage
-            tapas_all_species[n_species, start: end] = cvalues
-
-    # extract the water and other line-of-sight optical depths
-    loc['TAPAS_WATER'] = tapas_all_species[1, :]
-    loc['TAPAS_OTHERS'] = np.prod(tapas_all_species[2:, :], axis=0)
-
-    return loc
-
-
 # =============================================================================
 # Start of code
 # =============================================================================
 # Main code here
-if __name__ == "__main__":
+def main(instrument, filename=None):
 
     # define the dictionaries to store stuff
     p, loc = dict(), dict()
+
+    if instrument.upper() == 'CARMENES':
+        import setup_car as setup
+        p = setup.begin()
+    elif instrument.upper() == 'SPIROU':
+        import setup_spirou as setup
+        p = setup.begin()
+    else:
+        raise ValueError('Instrument = "{0}" not supported'.format(instrument))
+
     # get the data based on the instrument
-    loc = get_mk_tellu_data(p, loc)
+    p, loc = setup.get_mk_tellu_data(p, loc, input_filename=filename)
     # ----------------------------------------------------------------------
     # extract out data from loc
     mwave = loc['MWAVE']
@@ -516,6 +459,7 @@ if __name__ == "__main__":
     blaze = loc['BLAZE']
     swave = loc['SWAVE']
     airmass = loc['AIRMASS']
+    tapas = loc['TAPAS']
     # get the number of orders and number of pixels
     nord, npix = mwave.shape
     # ----------------------------------------------------------------------
@@ -526,11 +470,13 @@ if __name__ == "__main__":
         # get this orders flux
         spo, bzo = sflux[order_num], blaze[order_num]
         # normalise this orders flux
-        sflux[order_num] = spo / np.nanpercentile(spo, MKTELLU_BLAZE_PERCENTILE)
+        sflux[order_num] = spo / np.nanpercentile(spo,
+                                                  p['MKTELLU_BLAZE_PERCENTILE'])
         # normalise the blaze
-        blaze[order_num] = bzo /np.nanpercentile(bzo, MKTELLU_BLAZE_PERCENTILE)
+        blaze[order_num] = bzo /np.nanpercentile(bzo,
+                                                 p['MKTELLU_BLAZE_PERCENTILE'])
     # find where the blaze is bad
-    badblaze = blaze < MKTELLU_CUT_BLAZE_NORM
+    badblaze = blaze < p['MKTELLU_CUT_BLAZE_NORM']
     # set bad blaze to NaN
     blaze[badblaze] = np.nan
 
@@ -543,14 +489,12 @@ if __name__ == "__main__":
 
     # ----------------------------------------------------------------------
     # define the convolution size (per order)
-    wconv = np.repeat(MKTELLU_DEFAULT_CONV_WIDTH, nord).astype(float)
+    wconv = np.repeat(p['MKTELLU_DEFAULT_CONV_WIDTH'], nord).astype(float)
     # ----------------------------------------------------------------------
-    # load the transmission model
-    tapas = Table.read(TRANS_MODEL)
     # construct kernal (gaussian for instrument FWHM PIXEL LSF
-    kernel = construct_convolution_kernal()
+    kernel = kernal_with_instrument(p['FWHM_PIXEL_LSF'])
     # tapas spectra resampled onto our data wavelength vector
-    loc = resample_tapas(p, loc, mwave, npix, nord, tapas)
+    loc = resample_tapas(p, loc, mwave, npix, nord, tapas, kernel)
     # ----------------------------------------------------------------------
     # get airmass from header
     loc['AIRMASS'] = airmass
@@ -566,10 +510,52 @@ if __name__ == "__main__":
     # calculate tranmission map from sp and sed
     transmission_map = loc['SP_OUT'] / loc['SED_OUT']
     # ----------------------------------------------------------------------
+    # Quality control
+    # ----------------------------------------------------------------------
+    # set passed variable and fail message list
+    passed, fail_msg = True, []
+    # check that the file passed the CalcTelluAbsorption sigma clip loop
+    if not loc['PASSED']:
+        fail_msg.append('File did not converge on a solution')
+        passed = False
+    # check that the airmass is not too different from input airmass
+    airmass_diff = np.abs(loc['RECOV_AIRMASS'] - loc['AIRMASS'])
+    if airmass_diff > p['QC_MKTELLU_AIRMASS_DIFF']:
+        fmsg = ('Recovered airmass to de-similar than input airmass.'
+                'Recovered: {0:.3f}. Input: {1:.3f}. QC limit = {2}')
+        fargs = [loc['RECOV_AIRMASS'], loc['AIRMASS'],
+                 p['QC_MKTELLU_AIRMASS_DIFF']]
+        fail_msg.append(fmsg.format(*fargs))
+        passed = False
+    # check that the water vapor is within limits
+    water_cond1 = loc['RECOV_WATER'] < p['MKTELLU_TRANS_MIN_WATERCOL']
+    water_cond2 = loc['RECOV_WATER'] > p['MKTELLU_TRANS_MAX_WATERCOL']
+    if water_cond1 or water_cond2:
+        fmsg = ('Recovered water vapor optical depth not between {0} '
+                'and {1}')
+        fargs = [p['MKTELLU_TRANS_MIN_WATERCOL'],
+                 p['MKTELLU_TRANS_MAX_WATERCOL']]
+        fail_msg.append(fmsg.format(*fargs))
+        passed = False
+    # finally log the failed messages and set QC = 1 if we pass the
+    # quality control QC = 0 if we fail quality control
+    if passed:
+        WLOG(p, 'info',
+             'QUALITY CONTROL SUCCESSFUL - Well Done -')
+        QC = 1
+    else:
+        for farg in fail_msg:
+            wmsg = 'QUALITY CONTROL FAILED: {0}'
+            WLOG(p, 'warning', wmsg.format(farg))
+        QC = 0
+
+    # ----------------------------------------------------------------------
     # construct output filename
-    outname = os.path.join(OUTPUT_DIR, INPUT_TSS.replace('.fits', OUT_SUFFIX))
-    # write to file
-    fits.writeto(outname, transmission_map, overwrite=True)
+    if QC == 1 and loc['PASSED']:
+        outfile = os.path.basename(p['INPUT_SPEC'].replace('.fits', OUT_SUFFIX))
+        outname = os.path.join(p['WORKSPACE'], 'trans', outfile)
+        # write to file
+        fits.writeto(outname, transmission_map, overwrite=True)
 
 
 # =============================================================================

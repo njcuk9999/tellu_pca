@@ -27,32 +27,22 @@ DEBUG_PLOT = True
 PLOT = True
 
 # -----------------------------------------------------------------------------
-# define instrument name
-INSTRUMENT = 'CARMENES'
-INSTRUMENT = 'SPIROU'
-
-
-# get instrument setup
-if INSTRUMENT == 'CARMENES':
-    from setup_car import *
-if INSTRUMENT == 'SPIROU':
-    from setup_spirou import *
-# -----------------------------------------------------------------------------
 # output directory
-OUTPUT_DIR = WORKSPACE + '/trans/'
-OUT_SUFFIX = '_trans.fits'
+IN_SUFFIX = '_trans.fits'
+# intput directory
+OUT_SUFFIX = '_corrected.fits'
 
 
 # =============================================================================
 # Define functions
 # =============================================================================
-def tellu_fit_recon_abso_plot(p, loc):
+def tellu_fit_recon_abso_plot(p, loc, swaveall):
     # get constants from p
-    selected_order = TELLU_FIT_RECON_PLT_ORDER
+    selected_order = p['TELLU_FIT_RECON_PLT_ORDER']
     # get data dimensions
     ydim, xdim = loc['DATA'].shape
     # get selected order wave lengths
-    swave = loc['WAVE_IT'][selected_order, :]
+    swave = swaveall[selected_order, :]
     # get the data from loc for selected order
     start, end = selected_order * xdim, selected_order * xdim + xdim
     ssp = np.array(loc['SP'][selected_order, :])
@@ -80,17 +70,54 @@ def tellu_fit_recon_abso_plot(p, loc):
     plt.close()
 
 
-def calculate_absorption_pca(p, loc, x, mask):
+def tellu_pca_comp_plot(p, loc, mwaveall):
+    plot_name = 'tellu_pca_comp_plot'
     # get constants from p
-    npc = TELLU_NUMBER_OF_PRINCIPLE_COMP
+    npc = loc['NPC']
+    # get data from loc
+    wave = mwaveall.ravel()
+    pc = loc['PC']
+    # set up fig
+    fig, frame = plt.subplots(ncols=1, nrows=1)
+    # plot principle components
+    for it in range(npc):
+        # define the label for the component
+        label = 'pc {0}'.format(it + 1)
+        # plot the component with correct label
+        frame.plot(wave, pc[:, it], label=label)
+    # add legend
+    frame.legend(loc=0)
+    # add labels
+    title = 'Principle component plot'
+    frame.set(title=title, xlabel='Wavelength [nm]',
+              ylabel='Principle component power')
+    # end plotting function properly
+    plt.show()
+    plt.close()
 
-    pca = PCA(n_components=npc)
-    pcs = pca.fit_transform(x[:, mask])
+
+def calculate_absorption_pca(p, loc, x, mask, sflux):
+    # get constants from p
+    npc = p['TELLU_NUMBER_OF_PRINCIPLE_COMP']
+
+    # get eigen values
+    eig_u, eig_s, eig_vt = np.linalg.svd(x[:, mask], full_matrices=False)
+
+    # create pc image
+    pc = np.zeros([np.product(sflux.shape), npc])
+
+    # fill pc image
+    with warnings.catch_warnings(record=True) as _:
+        for it in range(npc):
+            for jt in range(x.shape[0]):
+                pc[:, it] += eig_u[jt, it] * x[jt, :]
+
+    fit_pc = np.array(pc)
 
     # save pc image to loc
-    loc['PC'] = pcs
+    loc['PC'] = pc
     loc['NPC'] = npc
-    loc['FIT_PC'] = pcs
+    loc['FIT_PC'] = fit_pc
     # return loc
     return loc
 
@@ -171,7 +198,7 @@ def construct_convolution_kernal2(p, loc, vsini):
     func_name = 'construct_convolution_kernal2()'
 
     # gaussian ew for vinsi km/s
-    ew = vsini / TELLU_MED_SAMPLING / fwhm()
+    ew = vsini / p['TELLU_MED_SAMPLING'] / fwhm()
     # set up the kernel exponent
     xx = np.arange(ew * 6) - ew * 3
     # kernal is the a gaussian
@@ -200,18 +227,18 @@ def calc_recon_abso(p, loc):
     wave2 = loc['WAVE_IT'].ravel()
     # define the good pixels as those above minimum transmission
     with warnings.catch_warnings(record=True) as _:
-        keep = tapas_all_species[0, :] > TELLU_FIT_MIN_TRANSMISSION
+        keep = tapas_all_species[0, :] > p['TELLU_FIT_MIN_TRANSMISSION']
     # also require wavelength constraints
-    keep &= (wave2 > TELLU_LAMBDA_MIN)
-    keep &= (wave2 < TELLU_LAMBDA_MAX)
+    keep &= (wave2 > p['TELLU_LAMBDA_MIN'])
+    keep &= (wave2 < p['TELLU_LAMBDA_MAX'])
     # construct convolution kernel
-    loc = construct_convolution_kernal2(p, loc, TELLU_FIT_VSINI)
+    loc = construct_convolution_kernal2(p, loc, p['TELLU_FIT_VSINI'])
     # ------------------------------------------------------------------
     # loop around a number of times
     template2 = None
-    for ite in range(TELLU_FIT_NITER):
+    for ite in range(p['TELLU_FIT_NITER']):
         # log progress
-        wmsg = 'Iteration {0} of {1}'.format(ite + 1, TELLU_FIT_NITER)
+        wmsg = 'Iteration {0} of {1}'.format(ite + 1, p['TELLU_FIT_NITER'])
         WLOG(p, '', wmsg)
 
         # --------------------------------------------------------------
@@ -227,7 +254,7 @@ def calc_recon_abso(p, loc):
                 # produce a mask of good transmission
                 order_tapas = tapas_all_species[0, start:end]
                 with warnings.catch_warnings(record=True) as _:
-                    mask = order_tapas > TRANSMISSION_CUT
+                    mask = order_tapas > p['TRANSMISSION_CUT']
                 # get good transmission spectrum
                 spgood = sp[order_num, :] * np.array(mask, dtype=float)
                 recongood = recon_abso[start:end]
@@ -260,7 +287,7 @@ def calc_recon_abso(p, loc):
         # --------------------------------------------------------------
         if loc['FLAG_TEMPLATE']:
             # construct convolution kernel
-            vsini = TELLU_FIT_VSINI2
+            vsini = p['TELLU_FIT_VSINI2']
             loc = construct_convolution_kernal2(p, loc, vsini)
             # loop around orders
             for order_num in range(ydim):
@@ -271,7 +298,7 @@ def calc_recon_abso(p, loc):
                 with warnings.catch_warnings(record=True) as _:
                     # produce a mask of good transmission
                     order_tapas = tapas_all_species[0, start:end]
-                    mask = order_tapas > TRANSMISSION_CUT
+                    mask = order_tapas > p['TRANSMISSION_CUT']
                     fmask = np.array(mask, dtype=float)
                     # get good transmission spectrum
                     resspecgood = resspec[start:end] * fmask
@@ -341,7 +368,7 @@ def calc_recon_abso(p, loc):
 def calc_molecular_absorption(p, loc):
 
     # get constants from p
-    limit = TELLU_FIT_LOG_LIMIT
+    limit = p['TELLU_FIT_LOG_LIMIT']
     # get data from loc
     recon_abso = loc['RECON_ABSO']
     tapas_all_species = loc['TAPAS_ALL_SPECIES']
@@ -439,25 +466,131 @@ def linear_minimization(vector, sample):
         return amps, recon
 
 
+def get_abso(p, sflux):
+
+    # load absorption map files
+    rawfiles = os.listdir(p['WORKSPACE'])
+
+    # sort through files
+    nfiles = 0
+    trans_files = []
+    for it, filename in enumerate(rawfiles):
+        if filename.endswith(IN_SUFFIX):
+            # construct absolute file path
+            absfilename = os.path.join(p['WORKSPACE'], 'trans', filename)
+            # append and iterate
+            nfiles += 1
+            trans_files.append(absfilename)
+
+    # set up storage for the absorption
+    abso = np.zeros([nfiles, np.product(sflux.shape)])
+
+    for it, filename in enumerate(trans_files):
+        # load data
+        data_it = fits.getdata(filename)
+        # push data and flatten
+        abso[it, :] = data_it.reshape(np.product(sflux.shape))
+
+    # log the absorption cube
+    with warnings.catch_warnings(record=True) as w:
+        log_abso = np.log(abso)
+    # return the log_absorption
+    return abso, log_abso
+
+
 # =============================================================================
 # Start of code
 # =============================================================================
 # Main code here
-if __name__ == "__main__":
-
-
+# def main(instrument, filename=None):
+if __name__ == '__main__':
+    instrument = 'CARMENES'
+    filename = None
     # define the dictionaries to store stuff
     p, loc = dict(), dict()
 
-    # ----------------------------------------------------------------------
-    # get data
-    loc = get_fit_tellu_data(p, loc)
+    if instrument.upper() == 'CARMENES':
+        import setup_car as setup
+        p = setup.begin()
+    elif instrument.upper() == 'SPIROU':
+        import setup_spirou as setup
+        p = setup.begin()
+    else:
+        raise ValueError('Instrument = "{0}" not supported'.format(instrument))
+
+    # get the data based on the instrument
+    p, loc = setup.get_fit_tellu_data(p, loc, filename)
 
     # ----------------------------------------------------------------------
     # extract out data from loc
     mwave = loc['MWAVE']
     sflux = loc['SFLUX']
+    blaze = loc['BLAZE']
     swave = loc['SWAVE']
+    airmass = loc['AIRMASS']
+    tapas = loc['TAPAS']
+    # get the number of orders and number of pixels
+    nord, npix = mwave.shape
+    # ----------------------------------------------------------------------
+    # construct kernal (gaussian for instrument FWHM PIXEL LSF
+    kernel = kernal_with_instrument(p['FWHM_PIXEL_LSF'])
+    # tapas spectra resampled onto our data wavelength vector
+    loc = resample_tapas(p, loc, mwave, npix, nord, tapas, kernel)
+    # ----------------------------------------------------------------------
+    # get abso files and log them
+    abso, log_abso = get_abso(p, sflux)
+    # ----------------------------------------------------------------------
+    # Locate valid pixels for PCA
+    # ----------------------------------------------------------------------
+    # determining the pixels relevant for PCA construction
+    keep = np.isfinite(np.sum(abso, axis=0))
+    # log fraction of valid (non NaN) pixels
+    fraction = np.sum(keep) / len(keep)
+    wmsg = 'Fraction of valid pixels (not NaNs) for PCA construction = {0:.3f}'
+    WLOG(p, '', wmsg.format(fraction))
+    # log fraction of valid pixels > 1 - (1/e)
+    with warnings.catch_warnings(record=True) as w:
+        keep &= np.min(log_abso, axis=0) > -1
+    fraction = np.sum(keep) / len(keep)
+    wmsg = 'Fraction of valid pixels with transmission > 1 - (1/e) = {0:.3f}'
+    WLOG(p, '', wmsg.format(fraction))
+
+
+    # ----------------------------------------------------------------------
+    # Check we have enough files
+    # ----------------------------------------------------------------------
+    nfiles = abso.shape[0]
+    npc = p['TELLU_NUMBER_OF_PRINCIPLE_COMP']
+    # check that we have enough files (greater than number of principle
+    #    components)
+    if nfiles <= npc:
+        emsg1 = 'Not enough "TELL_MAP" files in telluDB to run PCA analysis'
+        emsg2 = '\tNumber of files = {0}, number of PCA components = {1}'
+        emsg3 = '\tNumber of files > number of PCA components'
+        emsg4 = '\tAdd more files or reduce number of PCA components'
+        WLOG(p, 'error', [emsg1, emsg2.format(nfiles, npc),
+                                     emsg3, emsg4])
+
+    # ----------------------------------------------------------------------
+    # Perform PCA analysis on the log of the telluric absorption map
+    # ----------------------------------------------------------------------
+    # Requires p:
+    #           TELLU_NUMBER_OF_PRINCIPLE_COMP
+    #           ADD_DERIV_PC
+    #           FIT_DERIV_PC
+    # Requires loc:
+    #           DATA
+    # Returns loc:
+    #           PC
+    #           NPC
+    #           FIT_PC
+    loc = calculate_absorption_pca(p, loc, log_abso, keep, sflux)
+
+    # Plot PCA components
+    # debug plot
+    if PLOT:
+        # plot the transmission map plot
+        tellu_pca_comp_plot(p, loc, mwave)
 
     # ------------------------------------------------------------------
     # Shift the pca components to correct frame
@@ -480,13 +613,12 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------
     # log process
     wmsg1 = 'Shifting TAPAS spectrum from master wavelength grid'
-    wmsg2 = '\tFile = {0}'.format(os.path.basename(loc['MASTERWAVEFILE']))
-    WLOG(p, '', [wmsg1, wmsg2])
+    WLOG(p, '', [wmsg1])
     # shift tapas
-    for comp in range(len(loc['TAPAS_ALL_SPECIES'])):
-        wargs = [p, loc['TAPAS_ALL_SPECIES'][comp], mwave, swave]
+    for comp in range(len(loc['TAPAS_ALL'])):
+        wargs = [p, loc['TAPAS_ALL'][comp], mwave, swave]
         stapas = wave2wave(*wargs, reshape=True)
-        loc['TAPAS_ALL_SPECIES'][comp] = stapas.reshape(wargs[1].shape)
+        loc['TAPAS_ALL'][comp] = stapas.reshape(wargs[1].shape)
 
 
     # ------------------------------------------------------------------
@@ -545,7 +677,8 @@ if __name__ == "__main__":
 
     # ----------------------------------------------------------------------
     # construct output filename
-    outname = os.path.join(OUTPUT_DIR, INPUT_TSS.replace('.fits', OUT_SUFFIX))
+    outfile = os.path.basename(p['INPUT_SPEC'].replace('.fits', OUT_SUFFIX))
+    outname = os.path.join(p['WORKSPACE'], 'corrected', outfile)
 
     # write to file
     fits.writeto(outname, sp_out, overwrite=True)
