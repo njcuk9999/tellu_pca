@@ -16,9 +16,16 @@ from shared_functions import *
 # =============================================================================
 # Define variables
 # =============================================================================
-WORKSPACE = '/media/sf_D_DRIVE/tell_hack/project/data_car'
+
 INSTRUMENT = 'Carmenes'
-TELLU_SUFFIX = '_A.fits'
+INSTRUMENT = 'SPIROU'
+
+if INSTRUMENT.upper() == 'CARMENES':
+    WORKSPACE = '/media/sf_D_DRIVE/tell_hack/project/data_car'
+    TELLU_SUFFIX = '_A.fits'
+elif INSTRUMENT.upper() == 'SPIROU':
+    WORKSPACE = '/media/sf_D_DRIVE/tell_hack/project/data_spirou'
+    TELLU_SUFFIX = '_e2ds_AB.fits'
 # -----------------------------------------------------------------------------
 
 
@@ -33,8 +40,9 @@ if __name__ == "__main__":
     # loop around files
     for it, filename in enumerate(files):
         # print progress
-        wmsg = 'Processing file {0} of {1}'.format(it + 1, len(files))
-        WLOG(None, '', ['=' * 50, '', wmsg, '', '=' * 50])
+        wmsg1 = 'Processing file {0} of {1}'.format(it + 1, len(files))
+        wmsg2 = '\t File = {0}'.format(filename)
+        WLOG(None, '', ['=' * 50, '', wmsg1, wmsg2, '', '=' * 50])
         # only process correct files
         if filename.endswith(TELLU_SUFFIX):
             # construct absolute file name

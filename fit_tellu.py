@@ -36,38 +36,45 @@ OUT_SUFFIX = '_corrected.fits'
 # =============================================================================
 # Define functions
 # =============================================================================
-def tellu_fit_recon_abso_plot(p, loc, swaveall):
+def tellu_fit_recon_abso_plot(p, loc, sflux, swaveall):
     # get constants from p
     selected_order = p['TELLU_FIT_RECON_PLT_ORDER']
-    # get data dimensions
-    ydim, xdim = loc['DATA'].shape
-    # get selected order wave lengths
-    swave = swaveall[selected_order, :]
-    # get the data from loc for selected order
-    start, end = selected_order * xdim, selected_order * xdim + xdim
-    ssp = np.array(loc['SP'][selected_order, :])
-    ssp2 = np.array(loc['SP2'][start:end])
-    stemp2 = np.array(loc['TEMPLATE2'][start:end])
-    srecon_abso = np.array(loc['RECON_ABSO'][start:end])
-    # set up fig
-    fig, frame = plt.subplots(ncols=1, nrows=1)
-    # plot spectra for selected order
-    frame.plot(swave, ssp / np.nanmedian(ssp), color='k', label='input SP')
-    frame.plot(swave, ssp2 / np.nanmedian(ssp2) / srecon_abso, color='g',
-               label='Cleaned SP')
-    frame.plot(swave, stemp2 / np.nanmedian(stemp2), color='c',
-               label='Template')
-    frame.plot(swave, srecon_abso, color='r', label='recon abso')
-    # add legend
-    frame.legend(loc=0)
-    # add labels
-    title = 'Reconstructed Absorption (Order = {0})'
-    frame.set(title=title.format(selected_order),
-              xlabel='Wavelength [nm]', ylabel='Normalised flux')
 
-    # end plotting function properly
-    plt.show()
-    plt.close()
+    if selected_order == 'all':
+        selected_orders = np.arange(sflux.shape[0])
+    else:
+        selected_orders = [selected_order]
+
+    for selected_order in selected_orders:
+        # get data dimensions
+        ydim, xdim = sflux.shape
+        # get selected order wave lengths
+        swave = swaveall[selected_order, :]
+        # get the data from loc for selected order
+        start, end = selected_order * xdim, selected_order * xdim + xdim
+        ssp = np.array(sflux[selected_order, :])
+        ssp2 = np.array(loc['SP2'][start:end])
+        stemp2 = np.array(loc['TEMPLATE2'][start:end])
+        srecon_abso = np.array(loc['RECON_ABSO'][start:end])
+        # set up fig
+        fig, frame = plt.subplots(ncols=1, nrows=1)
+        # plot spectra for selected order
+        frame.plot(swave, ssp / np.nanmedian(ssp), color='k', label='input SP')
+        frame.plot(swave, ssp2 / np.nanmedian(ssp2) / srecon_abso, color='g',
+                   label='Cleaned SP')
+        frame.plot(swave, stemp2 / np.nanmedian(stemp2), color='c',
+                   label='Template')
+        frame.plot(swave, srecon_abso, color='r', label='recon abso')
+        # add legend
+        frame.legend(loc=0)
+        # add labels
+        title = 'Reconstructed Absorption (Order = {0})'
+        frame.set(title=title.format(selected_order),
+                  xlabel='Wavelength [nm]', ylabel='Normalised flux')
+
+        # end plotting function properly
+        plt.show()
+        plt.close()
 
 
 def tellu_pca_comp_plot(p, loc, mwaveall):
@@ -207,24 +214,23 @@ def construct_convolution_kernal2(p, loc, vsini):
     ker2 /= np.sum(ker2)
     # add to loc
     loc['KER2'] = ker2
-    loc.set_source('KER2', func_name)
     # return loc
     return loc
 
 
-def calc_recon_abso(p, loc):
+def calc_recon_abso(p, loc, sflux, swave):
     func_name = 'calc_recon_abso()'
     # get data from loc
-    sp = loc['sp']
-    tapas_all_species = loc['TAPAS_ALL_SPECIES']
+    sp = np.array(sflux)
+    tapas_all_species = loc['TAPAS_ALL']
     amps_abso_total = loc['AMPS_ABSOL_TOTAL']
     # get data dimensions
-    ydim, xdim = loc['DATA'].shape
+    ydim, xdim = sflux.shape
     # redefine storage for recon absorption
-    recon_abso = np.ones(np.product(loc['DATA'].shape))
+    recon_abso = np.ones(np.product(sflux.shape))
     # flatten spectrum and wavelengths
     sp2 = sp.ravel()
-    wave2 = loc['WAVE_IT'].ravel()
+    wave2 = swave.ravel()
     # define the good pixels as those above minimum transmission
     with warnings.catch_warnings(record=True) as _:
         keep = tapas_all_species[0, :] > p['TELLU_FIT_MIN_TRANSMISSION']
@@ -240,78 +246,33 @@ def calc_recon_abso(p, loc):
         # log progress
         wmsg = 'Iteration {0} of {1}'.format(ite + 1, p['TELLU_FIT_NITER'])
         WLOG(p, '', wmsg)
-
+        # setup storage for template2
+        template2 = np.zeros(np.product(sflux.shape))
         # --------------------------------------------------------------
-        # if we don't have a template construct one
-        if not loc['FLAG_TEMPLATE']:
-            # define template2 to fill
-            template2 = np.zeros(np.product(loc['DATA'].shape))
-            # loop around orders
-            for order_num in range(ydim):
-                # get start and end points
-                start = order_num * xdim
-                end = order_num * xdim + xdim
-                # produce a mask of good transmission
-                order_tapas = tapas_all_species[0, start:end]
-                with warnings.catch_warnings(record=True) as _:
-                    mask = order_tapas > p['TRANSMISSION_CUT']
-                # get good transmission spectrum
-                spgood = sp[order_num, :] * np.array(mask, dtype=float)
-                recongood = recon_abso[start:end]
-                # convolve spectrum
-                ckwargs = dict(v=loc['KER2'], mode='same')
-                sp2b = np.convolve(spgood / recongood, **ckwargs)
-                # convolve mask for weights
-                ww = np.convolve(np.array(mask, dtype=float), **ckwargs)
-                # wave weighted convolved spectrum into template2
-                with warnings.catch_warnings(record=True) as _:
-                    template2[start:end] = sp2b / ww
-        # else we have template so load it
-        else:
-            template2 = loc['TEMPLATE2']
-            # -----------------------------------------------------------------
-            # Shift the template to correct frame
-            # -----------------------------------------------------------------
-            # log process
-            wmsg1 = '\tShifting template on to master wavelength grid'
-            wargs = [os.path.basename(loc['MASTERWAVEFILE'])]
-            wmsg2 = '\t\tFile = {0}'.format(*wargs)
-            WLOG(p, '', [wmsg1, wmsg2])
-            # shift template
-            wargs = [p, template2, loc['MASTERWAVE'], loc['WAVE_IT']]
-            template2 = wave2wave(*wargs, reshape=True).reshape(template2.shape)
+        # loop around orders
+        for order_num in range(ydim):
+            # get start and end points
+            start = order_num * xdim
+            end = order_num * xdim + xdim
+            # produce a mask of good transmission
+            order_tapas = tapas_all_species[0, start:end]
+            with warnings.catch_warnings(record=True) as _:
+                mask = order_tapas > p['TRANSMISSION_CUT']
+            # get good transmission spectrum
+            spgood = sp[order_num, :] * np.array(mask, dtype=float)
+            recongood = recon_abso[start:end]
+            # convolve spectrum
+            ckwargs = dict(v=loc['KER2'], mode='same')
+            sp2b = np.convolve(spgood / recongood, **ckwargs)
+            # convolve mask for weights
+            ww = np.convolve(np.array(mask, dtype=float), **ckwargs)
+            # wave weighted convolved spectrum into template2
+            with warnings.catch_warnings(record=True) as _:
+                template2[start:end] = sp2b / ww
         # --------------------------------------------------------------
         # get residual spectrum
         with warnings.catch_warnings(record=True) as _:
             resspec = (sp2 / template2) / recon_abso
-        # --------------------------------------------------------------
-        if loc['FLAG_TEMPLATE']:
-            # construct convolution kernel
-            vsini = p['TELLU_FIT_VSINI2']
-            loc = construct_convolution_kernal2(p, loc, vsini)
-            # loop around orders
-            for order_num in range(ydim):
-                # get start and end points
-                start = order_num * xdim
-                end = order_num * xdim + xdim
-                # catch NaN warnings and ignore
-                with warnings.catch_warnings(record=True) as _:
-                    # produce a mask of good transmission
-                    order_tapas = tapas_all_species[0, start:end]
-                    mask = order_tapas > p['TRANSMISSION_CUT']
-                    fmask = np.array(mask, dtype=float)
-                    # get good transmission spectrum
-                    resspecgood = resspec[start:end] * fmask
-                    recongood = recon_abso[start:end]
-                # convolve spectrum
-                ckwargs = dict(v=loc['KER2'], mode='same')
-                with warnings.catch_warnings(record=True) as _:
-                    sp2b = np.convolve(resspecgood / recongood, **ckwargs)
-                # convolve mask for weights
-                ww = np.convolve(np.array(mask, dtype=float), **ckwargs)
-                # wave weighted convolved spectrum into dd
-                with warnings.catch_warnings(record=True) as _:
-                    resspec[start:end] = resspec[start:end] / (sp2b / ww)
         # --------------------------------------------------------------
         # Log dd and subtract median
         # log dd
@@ -358,45 +319,6 @@ def calc_recon_abso(p, loc):
     loc['TEMPLATE2'] = template2
     loc['RECON_ABSO'] = recon_abso
     loc['AMPS_ABSOL_TOTAL'] = amps_abso_total
-    # set the source
-    skeys = ['SP2', 'TEMPLATE2', 'RECON_ABSO', 'AMPS_ABSOL_TOTAL']
-    loc.set_sources(skeys, func_name)
-    # return loc
-    return loc
-
-
-def calc_molecular_absorption(p, loc):
-
-    # get constants from p
-    limit = p['TELLU_FIT_LOG_LIMIT']
-    # get data from loc
-    recon_abso = loc['RECON_ABSO']
-    tapas_all_species = loc['TAPAS_ALL_SPECIES']
-
-    # log data
-    log_recon_abso = np.log(recon_abso)
-    with warnings.catch_warnings(record=True) as _:
-        log_tapas_abso = np.log(tapas_all_species[1:, :])
-
-    # get good pixels
-    with warnings.catch_warnings(record=True) as _:
-        keep = np.min(log_tapas_abso, axis=0) > limit
-        keep &= log_recon_abso > limit
-    keep &= np.isfinite(recon_abso)
-
-    # get keep arrays
-    klog_recon_abso = log_recon_abso[keep]
-    klog_tapas_abso = log_tapas_abso[:, keep]
-
-    # work out amplitudes and recon
-    amps, recon = linear_minimization(klog_recon_abso, klog_tapas_abso)
-
-    # load amplitudes into loc
-    for it, molecule in enumerate(TELLU_ABSORBERS[1:]):
-        # get molecule keyword store and key
-        molkey = molecule.upper()
-        # load into loc
-        loc[molkey] = amps[it]
     # return loc
     return loc
 
@@ -469,7 +391,7 @@ def linear_minimization(vector, sample):
 def get_abso(p, sflux):
 
     # load absorption map files
-    rawfiles = os.listdir(p['WORKSPACE'])
+    rawfiles = os.listdir(os.path.join(p['WORKSPACE'], 'trans'))
 
     # sort through files
     nfiles = 0
@@ -486,6 +408,9 @@ def get_abso(p, sflux):
     abso = np.zeros([nfiles, np.product(sflux.shape)])
 
     for it, filename in enumerate(trans_files):
+
+        wmsg = 'Loading trans file={0}'.format(filename)
+        WLOG(p, '', wmsg)
         # load data
         data_it = fits.getdata(filename)
         # push data and flatten
@@ -502,10 +427,7 @@ def get_abso(p, sflux):
 # Start of code
 # =============================================================================
 # Main code here
-# def main(instrument, filename=None):
-if __name__ == '__main__':
-    instrument = 'CARMENES'
-    filename = None
+def main(instrument, filename=None):
     # define the dictionaries to store stuff
     p, loc = dict(), dict()
 
@@ -529,6 +451,10 @@ if __name__ == '__main__':
     swave = loc['SWAVE']
     airmass = loc['AIRMASS']
     tapas = loc['TAPAS']
+
+
+    sflux, blaze = normalise_by_blaze(p, sflux, blaze)
+
     # get the number of orders and number of pixels
     nord, npix = mwave.shape
     # ----------------------------------------------------------------------
@@ -539,6 +465,22 @@ if __name__ == '__main__':
     # ----------------------------------------------------------------------
     # get abso files and log them
     abso, log_abso = get_abso(p, sflux)
+
+    # ----------------------------------------------------------------------
+    # Check we have enough files
+    # ----------------------------------------------------------------------
+    nfiles = abso.shape[0]
+    npc = p['TELLU_NUMBER_OF_PRINCIPLE_COMP']
+    # check that we have enough files (greater than number of principle
+    #    components)
+    if nfiles <= npc:
+        emsg1 = 'Not enough "TELL_MAP" files in telluDB to run PCA analysis'
+        emsg2 = '\tNumber of files = {0}, number of PCA components = {1}'
+        emsg3 = '\tNumber of files > number of PCA components'
+        emsg4 = '\tAdd more files or reduce number of PCA components'
+        WLOG(p, 'error', [emsg1, emsg2.format(nfiles, npc),
+                                     emsg3, emsg4])
+
     # ----------------------------------------------------------------------
     # Locate valid pixels for PCA
     # ----------------------------------------------------------------------
@@ -555,21 +497,6 @@ if __name__ == '__main__':
     wmsg = 'Fraction of valid pixels with transmission > 1 - (1/e) = {0:.3f}'
     WLOG(p, '', wmsg.format(fraction))
 
-
-    # ----------------------------------------------------------------------
-    # Check we have enough files
-    # ----------------------------------------------------------------------
-    nfiles = abso.shape[0]
-    npc = p['TELLU_NUMBER_OF_PRINCIPLE_COMP']
-    # check that we have enough files (greater than number of principle
-    #    components)
-    if nfiles <= npc:
-        emsg1 = 'Not enough "TELL_MAP" files in telluDB to run PCA analysis'
-        emsg2 = '\tNumber of files = {0}, number of PCA components = {1}'
-        emsg3 = '\tNumber of files > number of PCA components'
-        emsg4 = '\tAdd more files or reduce number of PCA components'
-        WLOG(p, 'error', [emsg1, emsg2.format(nfiles, npc),
-                                     emsg3, emsg4])
 
     # ----------------------------------------------------------------------
     # Perform PCA analysis on the log of the telluric absorption map
@@ -620,7 +547,10 @@ if __name__ == '__main__':
         stapas = wave2wave(*wargs, reshape=True)
         loc['TAPAS_ALL'][comp] = stapas.reshape(wargs[1].shape)
 
-
+    # ------------------------------------------------------------------
+    # set up storage in loc
+    loc['RECON_ABSO'] = np.ones(np.product(sflux.shape))
+    loc['AMPS_ABSOL_TOTAL'] = np.zeros(loc['NPC'])
     # ------------------------------------------------------------------
     # Calculate reconstructed absorption
     # ------------------------------------------------------------------
@@ -648,32 +578,19 @@ if __name__ == '__main__':
     #           RECON_ABSO
     #           AMPS_ABSOL_TOTAL
     # TODO: Need to make sure we have everything for loc
-    loc = calc_recon_abso(p, loc)
+    loc = calc_recon_abso(p, loc, sflux, swave)
     # debug plot
     if PLOT > 0:
         # plot the recon abso plot
         # TODO: Need to make sure we have everything for loc
-        tellu_fit_recon_abso_plot(p, loc)
-
-    # ------------------------------------------------------------------
-    # Get molecular absorption
-    # ------------------------------------------------------------------
-    # Requires p:
-    #           TELLU_FIT_LOG_LIMIT
-    # Requeres loc:
-    #           RECON_ABSO
-    #           TAPAS_ALL_SPECIES
-    # Returns loc:
-    #           TAPAS_{molecule}
-    # TODO: Need to make sure we have everything for loc
-    loc = calc_molecular_absorption(p, loc)
+        tellu_fit_recon_abso_plot(p, loc, sflux, swave)
 
     # ------------------------------------------------------------------
     # Write corrected spectrum to E2DS
     # ------------------------------------------------------------------
     # reform the E2DS
     sp_out = loc['SP2'] / loc['RECON_ABSO']
-    sp_out = sp_out.reshape(loc['DATA'].shape)
+    sp_out = sp_out.reshape(sflux.shape)
 
     # ----------------------------------------------------------------------
     # construct output filename

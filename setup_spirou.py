@@ -105,8 +105,8 @@ p['MKTELLU_DEFAULT_CONV_WIDTH'] = 900
 # define the finer convolution width [in pixels]
 p['MKTELLU_FINER_CONV_WIDTH'] = 100
 
-# Selected plot order
-p['TELLU_FIT_RECON_PLT_ORDER'] = 33
+# Selected plot orderbetween 0 and 48 or 'all'
+p['TELLU_FIT_RECON_PLT_ORDER'] = 'all'
 
 # number of principle components to use
 p['TELLU_NUMBER_OF_PRINCIPLE_COMP'] = 5

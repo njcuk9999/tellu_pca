@@ -464,28 +464,7 @@ def main(instrument, filename=None):
     nord, npix = mwave.shape
     # ----------------------------------------------------------------------
     # loop through and normalise
-    # TODO: in SPIROU we have a blaze cut threshold and don't keep below this
-    # TODO:     threshold and normalise by the 95%
-    for order_num in range(nord):
-        # get this orders flux
-        spo, bzo = sflux[order_num], blaze[order_num]
-        # normalise this orders flux
-        sflux[order_num] = spo / np.nanpercentile(spo,
-                                                  p['MKTELLU_BLAZE_PERCENTILE'])
-        # normalise the blaze
-        blaze[order_num] = bzo /np.nanpercentile(bzo,
-                                                 p['MKTELLU_BLAZE_PERCENTILE'])
-    # find where the blaze is bad
-    badblaze = blaze < p['MKTELLU_CUT_BLAZE_NORM']
-    # set bad blaze to NaN
-    blaze[badblaze] = np.nan
-
-    # set to NaN values where spectrum is zero
-    zeromask = sflux == 0
-    sflux[zeromask] = np.nan
-    # divide spectrum by blaze
-    with warnings.catch_warnings(record=True) as _:
-        sflux = sflux / blaze
+    sflux, blaze = normalise_by_blaze(p, sflux, blaze)
 
     # ----------------------------------------------------------------------
     # define the convolution size (per order)

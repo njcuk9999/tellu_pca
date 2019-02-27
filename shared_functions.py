@@ -2,6 +2,7 @@ from astropy.time import Time
 from scipy.interpolate import InterpolatedUnivariateSpline as IUVSpline
 import numpy as np
 import sys
+import warnings
 
 
 # Define list of absorbers in the tapas fits table
@@ -36,7 +37,6 @@ def fwhm():
     return 2 * np.sqrt(2 * np.log(2))
 
 
-
 def kernal_with_instrument(lsf):
     # get the number of pixels
     npix = int(np.ceil(3 * lsf * 3.0 / 2) * 2 + 1)
@@ -50,7 +50,6 @@ def kernal_with_instrument(lsf):
     ker /= np.sum(ker)
     # return kernel
     return ker
-
 
 
 def resample_tapas(p, loc, mwave, npix, nord, tapas, kernel):
@@ -103,3 +102,31 @@ def resample_tapas(p, loc, mwave, npix, nord, tapas, kernel):
     loc['TAPAS_OTHERS'] = np.prod(tapas_all_species[2:, :], axis=0)
 
     return loc
+
+
+def normalise_by_blaze(p, sflux, blaze):
+    nord, npix = sflux.shape
+
+    for order_num in range(nord):
+        # get this orders flux
+        spo, bzo = sflux[order_num], blaze[order_num]
+        # normalise this orders flux
+        sflux[order_num] = spo / np.nanpercentile(spo,
+                                                  p['MKTELLU_BLAZE_PERCENTILE'])
+        # normalise the blaze
+        blaze[order_num] = bzo /np.nanpercentile(bzo,
+                                                 p['MKTELLU_BLAZE_PERCENTILE'])
+    # find where the blaze is bad
+    badblaze = blaze < p['MKTELLU_CUT_BLAZE_NORM']
+    # set bad blaze to NaN
+    blaze[badblaze] = np.nan
+
+    # set to NaN values where spectrum is zero
+    zeromask = sflux == 0
+    sflux[zeromask] = np.nan
+    # divide spectrum by blaze
+    with warnings.catch_warnings(record=True) as _:
+        sflux = sflux / blaze
+
+    return sflux, blaze
+

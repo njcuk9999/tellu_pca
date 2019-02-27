@@ -15,7 +15,7 @@ p['TRANS_MODEL'] = p['WORKSPACE'] + 'tapas_all_sp.fits.gz'
 # Master wavelength grid file to shift outputs to
 p['MASTER_WAVE_FILE'] = p['WORKSPACE'] + 'car-20170109T06h16m29s-sci-gtoc-nir_A.fits'
 # input spectrum
-p['INPUT_DEFAULT'] = p['WORKSPACE'] + 'car-20170109T06h16m29s-sci-gtoc-nir_A.fits'
+p['INPUT_DEFAULT'] = p['WORKSPACE'] + 'car-20170204T06h05m53s-sci-gtoc-nir_A.fits'
 
 # -----------------------------------------------------------------------------
 # Constant values
@@ -104,8 +104,8 @@ p['MKTELLU_DEFAULT_CONV_WIDTH'] = 900
 # define the finer convolution width [in pixels]
 p['MKTELLU_FINER_CONV_WIDTH'] = 100
 
-# Selected plot order
-p['TELLU_FIT_RECON_PLT_ORDER'] = 33
+# Selected plot orderbetween 0 and 27 or 'all'
+p['TELLU_FIT_RECON_PLT_ORDER'] = 'all'
 
 # number of principle components to use
 p['TELLU_NUMBER_OF_PRINCIPLE_COMP'] = 5
@@ -169,8 +169,8 @@ def get_mk_tellu_data(p, loc, input_filename=None):
     tapas = Table.read(p['TRANS_MODEL'])
 
     # ----------------------------------------------------------------------
-    # wave solution in nm
     p['INPUT_SPEC'] = input_filename
+    # wave solution in nm
     loc['MWAVE'] = mwave / 10.0
     loc['SFLUX'] = sflux
     loc['BLAZE'] = np.ones_like(sflux)
@@ -204,6 +204,7 @@ def get_fit_tellu_data(p, loc, input_filename=None):
     tapas = Table.read(p['TRANS_MODEL'])
 
     # ----------------------------------------------------------------------
+    p['INPUT_SPEC'] = input_filename
     # wave solution in nm
     loc['MWAVE'] = mwave / 10.0
     loc['SFLUX'] = sflux
