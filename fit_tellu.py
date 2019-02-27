@@ -29,6 +29,8 @@ PLOT = True
 # -----------------------------------------------------------------------------
 # define instrument name
 INSTRUMENT = 'CARMENES'
+INSTRUMENT = 'SPIROU'
+
 
 # get instrument setup
 if INSTRUMENT == 'CARMENES':
@@ -543,10 +545,10 @@ if __name__ == "__main__":
 
     # ----------------------------------------------------------------------
     # construct output filename
-    outname = os.path.join(OUTPUT_DIR, INPUT_SS.replace('.fits', OUT_SUFFIX))
+    outname = os.path.join(OUTPUT_DIR, INPUT_TSS.replace('.fits', OUT_SUFFIX))
 
     # write to file
-    fits.writeto(outname, sp_out)
+    fits.writeto(outname, sp_out, overwrite=True)
 
 # =============================================================================
 # End of code

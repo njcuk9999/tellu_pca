@@ -1,10 +1,12 @@
 from astropy.io import fits
+import numpy as np
+
 
 # -----------------------------------------------------------------------------
 # path values
 # -----------------------------------------------------------------------------
 # Directory of files
-WORKSPACE = '/tell_hack/data_car/'
+WORKSPACE = '/tell_hack/project/data_car/'
 # Transmission file (TAPAS with molecular species in
 TRANS_MODEL = WORKSPACE + 'tapas_all_sp.fits.gz'
 # Master wavelength grid file to shift outputs to
@@ -15,6 +17,14 @@ INPUT_TSS = WORKSPACE + 'car-20170109T06h16m29s-sci-gtoc-nir_A.fits'
 # -----------------------------------------------------------------------------
 # Constant values
 # -----------------------------------------------------------------------------
+# value below which the blaze in considered too low to be useful
+#     for all blaze profiles, we normalize to the 95th percentile.
+#     That's pretty much the peak value, but it is resistent to
+#     eventual outliers
+MKTELLU_CUT_BLAZE_NORM = 0.1
+MKTELLU_BLAZE_PERCENTILE = 95
+
+
 # Define mean line width expressed in pix
 # TODO: SPIROU default = 2.1
 FWHM_PIXEL_LSF = 2.1
@@ -147,9 +157,12 @@ def get_mk_tellu_data(p, loc):
     airmass = hdu[0].header['AIRMASS']
 
 
-    loc['MWAVE'] = mwave
+    # wave solution in nm
+    loc['MWAVE'] = mwave / 10.0
     loc['SFLUX'] = sflux
-    loc['SWAVE'] = swave
+    loc['BLAZE'] = np.ones_like(sflux)
+    # wave solution in nm
+    loc['SWAVE'] = swave / 10.0
     loc['AIRMASS'] = airmass
 
     return loc
@@ -169,10 +182,12 @@ def get_fit_tellu_data(p, loc):
     # get data from the header
     airmass = hdu[0].header['AIRMASS']
 
-
-    loc['MWAVE'] = mwave
+    # wave solution in nm
+    loc['MWAVE'] = mwave / 10.0
     loc['SFLUX'] = sflux
-    loc['SWAVE'] = swave
+    loc['BLAZE'] = np.ones_like(sflux)
+    # wave solution in nm
+    loc['SWAVE'] = swave / 10.0
     loc['AIRMASS'] = airmass
 
     return loc

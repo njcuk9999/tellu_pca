@@ -18,6 +18,13 @@ INPUT_TSS = WORKSPACE + '2294404o_pp_e2ds_AB.fits'
 # -----------------------------------------------------------------------------
 # Constant values
 # -----------------------------------------------------------------------------
+# value below which the blaze in considered too low to be useful
+#     for all blaze profiles, we normalize to the 95th percentile.
+#     That's pretty much the peak value, but it is resistent to
+#     eventual outliers
+MKTELLU_CUT_BLAZE_NORM = 0.1
+MKTELLU_BLAZE_PERCENTILE = 95
+
 # Define mean line width expressed in pix
 FWHM_PIXEL_LSF = 2.1
 
@@ -146,16 +153,12 @@ def get_mk_tellu_data(p, loc):
     sblaze = get_closest(shdr, kind='blaze')
 
     # ----------------------------------------------------------------------
-    # divide by blaze
-    sflux = sflux / sblaze
-
-    # ----------------------------------------------------------------------
     # get data from the header
     airmass = shdr['AIRMASS']
 
-
     loc['MWAVE'] = mwave
     loc['SFLUX'] = sflux
+    loc['BLAZE'] = sblaze
     loc['SWAVE'] = swave
     loc['AIRMASS'] = airmass
 
@@ -174,16 +177,12 @@ def get_fit_tellu_data(p, loc):
     sblaze = get_closest(shdr, kind='blaze')
 
     # ----------------------------------------------------------------------
-    # divide by blaze
-    sflux = sflux / sblaze
-
-    # ----------------------------------------------------------------------
     # get data from the header
     airmass = shdr['AIRMASS']
 
-
     loc['MWAVE'] = mwave
     loc['SFLUX'] = sflux
+    loc['BLAZE'] = sblaze
     loc['SWAVE'] = swave
     loc['AIRMASS'] = airmass
 

@@ -18,6 +18,7 @@ from scipy.optimize import curve_fit
 from scipy.ndimage import filters
 import warnings
 import matplotlib.pyplot as plt
+import os
 
 
 
@@ -32,6 +33,7 @@ PLOT = True
 # -----------------------------------------------------------------------------
 # define instrument name
 INSTRUMENT = 'CARMENES'
+INSTRUMENT = 'SPIROU'
 
 # get instrument setup
 if INSTRUMENT == 'CARMENES':
@@ -177,8 +179,8 @@ def calculate_telluric_absorption(p, loc):
         keep &= fit_sp < transfit_upper_bad
         # ---------------------------------------------------------------------
         # fit telluric absorption of the spectrum
-        with warnings.catch_warnings(record=True) as _:
-            popt, pcov = curve_fit(tapas_fit, keep, fit_sp.ravel(), p0=guess)
+        # with warnings.catch_warnings(record=True) as _:
+        popt, pcov = curve_fit(tapas_fit, keep, fit_sp.ravel(), p0=guess)
         # update our guess
         guess = np.array(popt)
         # ---------------------------------------------------------------------
@@ -484,7 +486,7 @@ def resample_tapas(p, loc, mwave, npix, nord, tapas):
             start = order_num * npix
             end = (order_num * npix) + npix
             # interpolate the values at these points
-            svalues = tapas_spline(mwave[order_num] / 10.0)
+            svalues = tapas_spline(mwave[order_num])
             # convolve with a gaussian function
             cvalues = np.convolve(svalues, kernel, mode='same')
             # add to storage
@@ -511,11 +513,35 @@ if __name__ == "__main__":
     # extract out data from loc
     mwave = loc['MWAVE']
     sflux = loc['SFLUX']
+    blaze = loc['BLAZE']
     swave = loc['SWAVE']
     airmass = loc['AIRMASS']
-    # ----------------------------------------------------------------------
     # get the number of orders and number of pixels
     nord, npix = mwave.shape
+    # ----------------------------------------------------------------------
+    # loop through and normalise
+    # TODO: in SPIROU we have a blaze cut threshold and don't keep below this
+    # TODO:     threshold and normalise by the 95%
+    for order_num in range(nord):
+        # get this orders flux
+        spo, bzo = sflux[order_num], blaze[order_num]
+        # normalise this orders flux
+        sflux[order_num] = spo / np.nanpercentile(spo, MKTELLU_BLAZE_PERCENTILE)
+        # normalise the blaze
+        blaze[order_num] = bzo /np.nanpercentile(bzo, MKTELLU_BLAZE_PERCENTILE)
+    # find where the blaze is bad
+    badblaze = blaze < MKTELLU_CUT_BLAZE_NORM
+    # set bad blaze to NaN
+    blaze[badblaze] = np.nan
+
+    # set to NaN values where spectrum is zero
+    zeromask = sflux == 0
+    sflux[zeromask] = np.nan
+    # divide spectrum by blaze
+    with warnings.catch_warnings(record=True) as _:
+        sflux = sflux / blaze
+
+    # ----------------------------------------------------------------------
     # define the convolution size (per order)
     wconv = np.repeat(MKTELLU_DEFAULT_CONV_WIDTH, nord).astype(float)
     # ----------------------------------------------------------------------
@@ -543,7 +569,7 @@ if __name__ == "__main__":
     # construct output filename
     outname = os.path.join(OUTPUT_DIR, INPUT_TSS.replace('.fits', OUT_SUFFIX))
     # write to file
-    fits.writeto(outname, transmission_map)
+    fits.writeto(outname, transmission_map, overwrite=True)
 
 
 # =============================================================================
