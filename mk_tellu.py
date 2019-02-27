@@ -16,26 +16,13 @@ from scipy.optimize import curve_fit
 from scipy.ndimage import filters
 import warnings
 import matplotlib.pyplot as plt
-from astropy.time import Time
+
+from shared_functions import *
+
 
 # =============================================================================
 # Define variables
 # =============================================================================
-# Directory of files
-WORKSPACE = '/tell_hack/carmenes/'
-# Transmission file (TAPAS with molecular species in
-TRANS_MODEL = WORKSPACE + 'tapas_all_sp.fits.gz'
-# Master wavelength grid file to shift outputs to
-MASTER_WAVE_FILE = WORKSPACE + 'car-20170109T06h16m29s-sci-gtoc-nir_A.fits'
-# input spectrum
-INPUT_TSS = WORKSPACE + 'car-20170109T06h16m29s-sci-gtoc-nir_A.fits'
-
-# output directory
-OUTPUT_DIR = WORKSPACE + '/trans/'
-OUT_SUFFIX = '_trans.fits'
-
-
-# -----------------------------------------------------------------------------
 # plotting options
 DEBUG_PLOT = True
 PLOT = True
@@ -44,88 +31,15 @@ PLOT = True
 # define instrument name
 INSTRUMENT = 'CARMENES'
 
-# Define mean line width expressed in pix
-# TODO: SPIROU default = 2.1
-FWHM_PIXEL_LSF = 2.1
-
-# threshold in absorbance where we will stop iterating the absorption
-#     model fit
-MKTELLU_DPARAM_THRES = 0.001
-
-# max number of iterations, normally converges in about 12 iterations
-MKTELLU_MAX_ITER = 50
-
-# minimum transmission required for use of a given pixel in the TAPAS
-#    and SED fitting
-MKTELLU_THRES_TRANSFIT = 0.3
-
-# Defines the bad pixels if the spectrum is larger than this value.
-#    These values are likely an OH line or a cosmic ray
-MKTELLU_TRANS_FIT_UPPER_BAD = 1.1
-
-# Defines the minimum allowed value for the recovered water vapor optical
-#    depth (should not be able 1)
-MKTELLU_TRANS_MIN_WATERCOL = 0.2
-
-# Defines the maximum allowed value for the recovered water vapor optical
-#    depth
-MKTELLU_TRANS_MAX_WATERCOL = 99
-
-# Defines the minimum number of good points required to normalise the
-#    spectrum, if less than this we don't normalise the spectrum by its
-#    median
-MKTELLU_TRANS_MIN_NUM_GOOD = 100
-
-# Defines the percentile used to gauge which transmission points should
-#    be used to median (above this percentile is used to median)
-MKTELLU_TRANS_TAU_PERCENTILE = 95
-
-# sigma-clipping of the residuals of the difference between the
-# spectrum divided by the fitted TAPAS absorption and the
-# best guess of the SED
-MKTELLU_TRANS_SIGMA_CLIP = 20.0
-
-# median-filter the trans data measured in pixels
-MKTELLU_TRANS_TEMPLATE_MEDFILT = 31
-
-# Define the threshold for "small" values that do not add to the weighting
-MKTELLU_SMALL_WEIGHTING_ERROR = 0.01
-
-# Define the median sampling expressed in km/s / pix
-# TODO: MED_SAMPLING = 2.2
-MKTELLU_MED_SAMPLING = 2.2
-
-# Define the orders to plot (not too many) - but can put 'all' to show all
-#    'all' are shown one-by-one and then closed (in non-interactive mode)
-MKTELLU_PLOT_ORDER_NUMS = [12, 14, 16]
-
-# Set an upper limit for the allowed line-of-sight optical depth of water
-MKTELLU_TAU_WATER_ULIMIT = 99
-
-# set a lower and upper limit for the allowed line-of-sight optical depth
-#    for other absorbers (upper limit equivalent to airmass limit)
-# line-of-sight optical depth for other absorbers cannot be less than one
-#      (that's zenith) keep the limit at 0.2 just so that the value gets
-#      propagated to header and leaves open the possibility that during
-#      the convergence of the algorithm, values go slightly below 1.0
-MKTELLU_TAU_OTHER_LLIMIT = 0.2
-# line-of-sight optical depth for other absorbers cannot be greater than 5
-# ... that would be an airmass of 5 and SPIRou cannot observe there
-MKTELLU_TAU_OTHER_ULIMIT = 5.0
-
-# bad values and small values are set to this value (as a lower limit to
-#   avoid dividing by small numbers or zero
-MKTELLU_SMALL_LIMIT = 1.0e-9
-
-# define the default convolution width [in pixels]
-# TODO: SPIROU DEFAULT = 900
-MKTELLU_DEFAULT_CONV_WIDTH = 900
-# define the finer convolution width [in pixels]
-MKTELLU_FINER_CONV_WIDTH = 100
-
-# Define list of absorbers in the tapas fits table
-TELLU_ABSORBERS = ['combined', 'h2o', 'o3', 'n2o', 'o2', 'co2', 'ch4']
+# get instrument setup
+if INSTRUMENT == 'CERMENES':
+    from setup_car import *
+if INSTRUMENT == 'SPIROU':
+    from setup_spirou import *
 # -----------------------------------------------------------------------------
+# output directory
+OUTPUT_DIR = WORKSPACE + '/trans/'
+OUT_SUFFIX = '_trans.fits'
 
 
 # =============================================================================
@@ -173,15 +87,6 @@ def mk_tellu_wave_flux_plot(p, order_num, wave, tau1, sp, sp3, sed,
     # end plotting function properly
     plt.show()
     plt.close()
-
-
-def WLOG(p, level, message):
-    if type(message) is str:
-        message = [message]
-
-    timenow = Time.now()
-    for mess in message:
-        print('{0}: {1}: {2}'.format(timenow, level, mess))
 
 
 def calculate_telluric_absorption(p, loc):
@@ -554,10 +459,6 @@ def construct_convolution_kernal():
     return ker
 
 
-def fwhm():
-    return 2 * np.sqrt(2 * np.log(2))
-
-
 def resample_tapas(p, loc, mwave, npix, nord, tapas):
 
     tapas_all_species = np.zeros([len(TELLU_ABSORBERS), npix * nord])
@@ -594,31 +495,6 @@ def resample_tapas(p, loc, mwave, npix, nord, tapas):
     return loc
 
 
-def get_data(p, loc):
-
-
-    if INSTRUMENT.upper() == 'CARMENES':
-        # ----------------------------------------------------------------------
-        # get master wave grid
-        hdu = fits.open(MASTER_WAVE_FILE)
-        mwave = hdu[4].data
-        # ----------------------------------------------------------------------
-        # get the telluric spectrum
-        hdu = fits.open(INPUT_TSS)
-        sflux = hdu[1].data
-        swave = hdu[4].data
-        # ----------------------------------------------------------------------
-        # get data from the header
-        airmass = hdu[0].header['AIRMASS']
-
-
-    loc['MWAVE'] = mwave
-    loc['SFLUX'] = sflux
-    loc['SWAVE'] = swave
-    loc['AIRMASS'] = airmass
-
-    return loc
-
 # =============================================================================
 # Start of code
 # =============================================================================
@@ -628,7 +504,7 @@ if __name__ == "__main__":
     # define the dictionaries to store stuff
     p, loc = dict(), dict()
     # get the data based on the instrument
-    loc = get_data(p, loc)
+    loc = get_mk_tellu_data(p, loc)
     # ----------------------------------------------------------------------
     # extract out data from loc
     mwave = loc['MWAVE']

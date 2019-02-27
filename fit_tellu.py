@@ -17,26 +17,12 @@ import os
 from astropy.time import Time
 from sklearn.decomposition import PCA
 
+from shared_functions import *
+
 
 # =============================================================================
 # Define variables
 # =============================================================================
-# Directory of files
-WORKSPACE = '/tell_hack/carmenes/'
-# Transmission file (TAPAS with molecular species in
-TRANS_MODEL = WORKSPACE + 'tapas_all_sp.fits.gz'
-# Master wavelength grid file to shift outputs to
-MASTER_WAVE_FILE = WORKSPACE + 'car-20170109T06h16m29s-sci-gtoc-nir_A.fits'
-# input spectrum
-INPUT_SS = WORKSPACE + 'car-20170109T06h16m29s-sci-gtoc-nir_A.fits'
-
-# input trans directory
-IN_DIR = WORKSPACE + '/trans/'
-IN_SUFFIX = '_trans.fits'
-OUTPUT_DIR = WORKSPACE + '/corrected/'
-OUT_SUFFIX = '_corrected.fits'
-
-# -----------------------------------------------------------------------------
 # plotting options
 DEBUG_PLOT = True
 PLOT = True
@@ -45,38 +31,15 @@ PLOT = True
 # define instrument name
 INSTRUMENT = 'CARMENES'
 
-# Selected plot order
-TELLU_FIT_RECON_PLT_ORDER = 33
-
-# number of principle components to use
-TELLU_NUMBER_OF_PRINCIPLE_COMP = 5
-
-# Define the median sampling expressed in km/s / pix
-TELLU_MED_SAMPLING = 2.2
-
-# Wavelength bounds of instrument
-TELLU_LAMBDA_MIN = 1000.0
-TELLU_LAMBDA_MAX = 2100.0
-
-# Minimum tranmission to fit
-TELLU_FIT_MIN_TRANSMISSION = 0.2
-
-# Gaussian kernal size km/s
-TELLU_FIT_VSINI = 15.0
-TELLU_FIT_VSINI2 = 30.0
-
-# Number of iterations to run (SPIROU converges in less than 3 to 4)
-TELLU_FIT_NITER = 4
-
-# Define min transmission in tapas models to consider an
-#     element part of continuum
-TRANSMISSION_CUT = 0.98
-
-# Smallest log reconstructed absorption to keep?
-TELLU_FIT_LOG_LIMIT = -0.5
-
-# Define list of absorbers in the tapas fits table
-TELLU_ABSORBERS = ['combined', 'h2o', 'o3', 'n2o', 'o2', 'co2', 'ch4']
+# get instrument setup
+if INSTRUMENT == 'CERMENES':
+    from setup_car import *
+if INSTRUMENT == 'SPIROU':
+    from setup_spirou import *
+# -----------------------------------------------------------------------------
+# output directory
+OUTPUT_DIR = WORKSPACE + '/trans/'
+OUT_SUFFIX = '_trans.fits'
 
 
 # =============================================================================
@@ -129,19 +92,6 @@ def calculate_absorption_pca(p, loc, x, mask):
     loc['FIT_PC'] = pcs
     # return loc
     return loc
-
-
-def WLOG(p, level, message):
-    if type(message) is str:
-        message = [message]
-
-    timenow = Time.now()
-    for mess in message:
-        print('{0}: {1}: {2}'.format(timenow, level, mess))
-
-
-def fwhm():
-    return 2 * np.sqrt(2 * np.log(2))
 
 
 def wave2wave(p, spectrum, wave1, wave2, reshape=False):
@@ -488,29 +438,6 @@ def linear_minimization(vector, sample):
         return amps, recon
 
 
-def get_data(p, loc):
-    if INSTRUMENT.upper() == 'CARMENES':
-        # ----------------------------------------------------------------------
-        # get master wave grid
-        hdu = fits.open(MASTER_WAVE_FILE)
-        mwave = hdu[4].data
-        # ----------------------------------------------------------------------
-        # get the telluric spectrum
-        hdu = fits.open(INPUT_SS)
-        sflux = hdu[1].data
-        swave = hdu[4].data
-        # ----------------------------------------------------------------------
-        # get data from the header
-
-
-    loc['MWAVE'] = mwave
-    loc['SFLUX'] = sflux
-    loc['SWAVE'] = swave
-
-
-    return loc
-
-
 # =============================================================================
 # Start of code
 # =============================================================================
@@ -523,7 +450,7 @@ if __name__ == "__main__":
 
     # ----------------------------------------------------------------------
     # get data
-    loc = get_data(p, loc)
+    loc = get_fit_tellu_data(p, loc)
 
     # ----------------------------------------------------------------------
     # extract out data from loc
