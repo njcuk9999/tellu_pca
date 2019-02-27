@@ -8,6 +8,8 @@ Created on 2019-02-26 13:29
 @author: ncook
 Version 0.0.1
 """
+from shared_functions import *
+
 from astropy.io import fits
 import numpy as np
 from astropy.table import Table
@@ -17,7 +19,7 @@ from scipy.ndimage import filters
 import warnings
 import matplotlib.pyplot as plt
 
-from shared_functions import *
+
 
 
 # =============================================================================
@@ -32,7 +34,7 @@ PLOT = True
 INSTRUMENT = 'CARMENES'
 
 # get instrument setup
-if INSTRUMENT == 'CERMENES':
+if INSTRUMENT == 'CARMENES':
     from setup_car import *
 if INSTRUMENT == 'SPIROU':
     from setup_spirou import *
@@ -516,19 +518,14 @@ if __name__ == "__main__":
     nord, npix = mwave.shape
     # define the convolution size (per order)
     wconv = np.repeat(MKTELLU_DEFAULT_CONV_WIDTH, nord).astype(float)
-
     # ----------------------------------------------------------------------
     # load the transmission model
     tapas = Table.read(TRANS_MODEL)
-
     # construct kernal (gaussian for instrument FWHM PIXEL LSF
     kernel = construct_convolution_kernal()
-
     # tapas spectra resampled onto our data wavelength vector
     loc = resample_tapas(p, loc, mwave, npix, nord, tapas)
-
     # ----------------------------------------------------------------------
-
     # get airmass from header
     loc['AIRMASS'] = airmass
     # set master wave
@@ -542,11 +539,9 @@ if __name__ == "__main__":
     loc = calculate_telluric_absorption(p, loc)
     # calculate tranmission map from sp and sed
     transmission_map = loc['SP_OUT'] / loc['SED_OUT']
-
     # ----------------------------------------------------------------------
     # construct output filename
     outname = os.path.join(OUTPUT_DIR, INPUT_TSS.replace('.fits', OUT_SUFFIX))
-
     # write to file
     fits.writeto(outname, transmission_map)
 

@@ -8,16 +8,15 @@ Created on 2019-02-26 19:07
 @author: ncook
 Version 0.0.1
 """
+from shared_functions import *
+
 from astropy.io import fits
 import numpy as np
 from scipy.interpolate import InterpolatedUnivariateSpline as IUVSpline
 import warnings
 import matplotlib.pyplot as plt
 import os
-from astropy.time import Time
 from sklearn.decomposition import PCA
-
-from shared_functions import *
 
 
 # =============================================================================
@@ -32,7 +31,7 @@ PLOT = True
 INSTRUMENT = 'CARMENES'
 
 # get instrument setup
-if INSTRUMENT == 'CERMENES':
+if INSTRUMENT == 'CARMENES':
     from setup_car import *
 if INSTRUMENT == 'SPIROU':
     from setup_spirou import *
