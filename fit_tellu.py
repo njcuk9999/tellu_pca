@@ -205,7 +205,7 @@ def construct_convolution_kernal2(p, loc, vsini):
     func_name = 'construct_convolution_kernal2()'
 
     # gaussian ew for vinsi km/s
-    ew = vsini / p['TELLU_MED_SAMPLING'] / fwhm()
+    ew = vsini / (p['TELLU_MED_SAMPLING'] / fwhm())
     # set up the kernel exponent
     xx = np.arange(ew * 6) - ew * 3
     # kernal is the a gaussian
@@ -577,12 +577,10 @@ def main(instrument, filename=None):
     #           TEMPLATE2
     #           RECON_ABSO
     #           AMPS_ABSOL_TOTAL
-    # TODO: Need to make sure we have everything for loc
     loc = calc_recon_abso(p, loc, sflux, swave)
     # debug plot
     if PLOT > 0:
         # plot the recon abso plot
-        # TODO: Need to make sure we have everything for loc
         tellu_fit_recon_abso_plot(p, loc, sflux, swave)
 
     # ------------------------------------------------------------------
