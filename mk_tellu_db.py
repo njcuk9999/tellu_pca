@@ -24,8 +24,8 @@ if INSTRUMENT.upper() == 'CARMENES':
     WORKSPACE = '/media/sf_D_DRIVE/tell_hack/project/data_car'
     TELLU_SUFFIX = '_A.fits'
 elif INSTRUMENT.upper() == 'SPIROU':
-    WORKSPACE = '/media/sf_D_DRIVE/tell_hack/project/data_spirou'
-    TELLU_SUFFIX = '_e2ds_AB.fits'
+    WORKSPACE = '/media/sf_D_DRIVE/tell_hack/project/data_spirou/tellu'
+    TELLU_SUFFIX = '_e2dsff_AB.fits'
 # -----------------------------------------------------------------------------
 
 

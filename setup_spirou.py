@@ -15,7 +15,7 @@ p['TRANS_MODEL'] = p['WORKSPACE'] + 'tapas_all_sp.fits.gz'
 # Master wavelength grid file to shift outputs to
 p['MASTER_WAVE_FILE'] = p['WORKSPACE'] + 'MASTER_WAVE.fits'
 # input spectrum
-p['INPUT_DEFAULT'] = p['WORKSPACE'] + '2294404o_pp_e2ds_AB.fits'
+p['INPUT_DEFAULT'] = p['WORKSPACE'] + 'tellu/2294404o_pp_e2dsff_AB.fits'
 
 # -----------------------------------------------------------------------------
 # Constant values

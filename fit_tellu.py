@@ -16,7 +16,6 @@ from scipy.interpolate import InterpolatedUnivariateSpline as IUVSpline
 import warnings
 import matplotlib.pyplot as plt
 import os
-from sklearn.decomposition import PCA
 
 
 # =============================================================================
